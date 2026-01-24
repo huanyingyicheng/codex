@@ -113,6 +113,33 @@ def applescript_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 
 
+def resolve_executable(executable: str) -> str:
+    path = Path(executable)
+    if path.is_absolute() or path.parent != Path("."):
+        if path.exists():
+            return str(path)
+        die(f"Executable not found: {executable}")
+
+    resolved = which(executable)
+    if resolved:
+        return resolved
+
+    if " " in executable:
+        die(
+            "Executable not found. It looks like you passed a full command string. "
+            "Use command as an array of tokens or use tool=codex with codex_args."
+        )
+    die(f"Executable not found: {executable}")
+    raise AssertionError("unreachable")
+
+
+def validate_command(command: list[str]) -> list[str]:
+    if not command:
+        die("command must not be empty")
+    command[0] = resolve_executable(command[0])
+    return command
+
+
 def build_command(
     agent: dict,
     defaults: dict,
@@ -316,6 +343,11 @@ def main() -> None:
         action="store_true",
         help="Skip confirmation prompts when creating multiple agents",
     )
+    parser.add_argument(
+        "--skip-command-check",
+        action="store_true",
+        help="Skip executable checks for command[0]",
+    )
     args = parser.parse_args()
 
     config_path = Path(args.config).resolve()
@@ -374,6 +406,8 @@ def main() -> None:
         }
 
         command = build_command(agent, defaults, mapping)
+        if not args.skip_command_check:
+            command = validate_command(command)
         prepared.append((name, worktree, report, inbox, branch, task, command))
 
     print(f"Prepared {len(prepared)} agent(s).")

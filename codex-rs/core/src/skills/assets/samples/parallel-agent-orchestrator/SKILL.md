@@ -24,6 +24,7 @@ Launch multiple AI agents in parallel with isolated git worktrees, visible termi
 - In each agent prompt, instruct the agent to write updates to its report file.
 - In each agent prompt, instruct the agent to poll its inbox file and acknowledge commands.
 - For multiple agents, require confirmation prompts before launching.
+- Use prepare_agents.py to avoid malformed command arrays.
 - Keep approval and sandbox settings at the user's existing Codex defaults unless asked to override.
 - Prefer small, independent tasks so merges stay simple.
 - Require each agent to stop after writing a final summary.

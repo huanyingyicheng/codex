@@ -9,6 +9,7 @@ This file documents the JSON schema for scripts/launch_agents.py.
 - --dry-run: Preview actions without creating worktrees or report files.
 - --confirm: Require interactive confirmation before creating worktrees or windows.
 - --yes: Skip confirmation prompts when creating multiple agents.
+- --skip-command-check: Skip executable checks for command[0].
 
 ## Top-level fields
 
