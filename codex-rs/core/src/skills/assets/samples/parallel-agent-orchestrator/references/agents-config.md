@@ -17,6 +17,7 @@ This file documents the JSON schema for scripts/launch_agents.py.
 - worktrees_dir (string, optional): Relative to root. Default is ".worktrees".
 - reports_dir (string, optional): Relative to root. Default is "reports".
 - inboxes_dir (string, optional): Relative to root. Default is the same as reports_dir.
+- protocol_path (string, optional): Path to the agent protocol file. Defaults to the skill's references/agent-protocol.md.
 - base_ref (string, optional): Git ref used when creating new worktrees. Default is "HEAD".
 - terminal (string, optional): Terminal launcher preference.
 - window_mode (string, optional): Windows Terminal only. "window" (default), "tab", or "pane".
@@ -47,6 +48,8 @@ Replace in command strings:
 - {WORKTREE}
 - {REPORT}
 - {INBOX}
+- {PROTOCOL_PATH}
+- {PROTOCOL_TEXT}
 - {TASK}
 - {NAME}
 
@@ -109,7 +112,7 @@ python scripts/prepare_agents.py --output agents.json --example --count 3 --over
       "command": [
         "other-ai-cli",
         "--prompt",
-        "Task: {TASK}. Write progress to {REPORT}."
+        "Task: {TASK}.\nFollow this protocol:\n{PROTOCOL_TEXT}\nWrite progress to {REPORT}.\nCheck {INBOX}."
       ],
       "task": "Draft release notes",
       "report": "reports/agent-other.md"

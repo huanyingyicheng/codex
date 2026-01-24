@@ -21,6 +21,8 @@ from shutil import which
 WINDOWS = sys.platform.startswith("win")
 MACOS = sys.platform == "darwin"
 LINUX = sys.platform.startswith("linux")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PROTOCOL = SKILL_ROOT / "references" / "agent-protocol.md"
 
 
 def die(message: str) -> None:
@@ -131,6 +133,21 @@ def resolve_executable(executable: str) -> str:
         )
     die(f"Executable not found: {executable}")
     raise AssertionError("unreachable")
+
+
+def resolve_protocol_path(root: Path, raw: str | None) -> Path:
+    if raw:
+        path = Path(raw)
+        if not path.is_absolute():
+            path = root / path
+        return path
+    return DEFAULT_PROTOCOL
+
+
+def load_protocol_text(path: Path) -> str:
+    if not path.exists():
+        die(f"Protocol file not found: {path}")
+    return path.read_text(encoding="utf-8")
 
 
 def validate_command(command: list[str]) -> list[str]:
@@ -376,6 +393,8 @@ def main() -> None:
     worktrees_dir = config.get("worktrees_dir", ".worktrees")
     reports_dir = config.get("reports_dir", "reports")
     inboxes_dir = config.get("inboxes_dir", reports_dir)
+    protocol_path = resolve_protocol_path(root, config.get("protocol_path"))
+    protocol_text = load_protocol_text(protocol_path)
     base_ref = config.get("base_ref", "HEAD")
     terminal = config.get("terminal", "auto")
     window_mode = config.get("window_mode", "window")
@@ -416,6 +435,8 @@ def main() -> None:
             "{WORKTREE}": str(worktree),
             "{REPORT}": str(report),
             "{INBOX}": str(inbox),
+            "{PROTOCOL_PATH}": str(protocol_path),
+            "{PROTOCOL_TEXT}": protocol_text,
             "{TASK}": task or "",
             "{NAME}": name,
         }

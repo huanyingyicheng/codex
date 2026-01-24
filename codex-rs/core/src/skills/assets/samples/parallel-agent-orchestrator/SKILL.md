@@ -26,6 +26,7 @@ Launch multiple AI agents in parallel with isolated git worktrees, visible termi
 - For multiple agents, require confirmation prompts before launching.
 - Use prepare_agents.py to avoid malformed command arrays.
 - To keep everything in one Windows Terminal window, set window_mode to tab or pane.
+- For non-Codex CLIs, include {PROTOCOL_TEXT} in the prompt so the agent follows the same protocol.
 - Keep approval and sandbox settings at the user's existing Codex defaults unless asked to override.
 - Prefer small, independent tasks so merges stay simple.
 - Require each agent to stop after writing a final summary.
@@ -44,3 +45,4 @@ Launch multiple AI agents in parallel with isolated git worktrees, visible termi
 - scripts/dispatch_inbox.py: Append new commands to agent inbox files.
 - assets/agents.example.json: Starter template for multi-agent configs.
 - references/agents-config.md: Config schema and examples.
+- references/agent-protocol.md: Standard protocol shared by all agents.
