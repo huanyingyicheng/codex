@@ -42,4 +42,5 @@ Launch multiple AI agents in parallel with isolated git worktrees, visible termi
 - scripts/prepare_agents.py: Interactive config generator with confirmation loop.
 - scripts/launch_agents.py: Create worktrees and launch new terminal windows.
 - scripts/dispatch_inbox.py: Append new commands to agent inbox files.
+- assets/agents.example.json: Starter template for multi-agent configs.
 - references/agents-config.md: Config schema and examples.

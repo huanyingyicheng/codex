@@ -1,0 +1,18 @@
+{
+  "terminal": "wt",
+  "window_mode": "tab",
+  "agents": [
+    {
+      "name": "agent-a",
+      "tool": "codex",
+      "task": "Describe what you want agent-a to do",
+      "codex_args": ["-a", "auto-edit"]
+    },
+    {
+      "name": "agent-b",
+      "tool": "codex",
+      "task": "Describe what you want agent-b to do",
+      "codex_args": ["-a", "auto-edit"]
+    }
+  ]
+}
