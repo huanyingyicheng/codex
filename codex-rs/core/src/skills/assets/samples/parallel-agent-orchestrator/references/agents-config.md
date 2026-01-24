@@ -7,6 +7,8 @@ This file documents the JSON schema for scripts/launch_agents.py.
 - --config PATH: Path to the JSON config file.
 - --no-window: Skip opening terminal windows.
 - --dry-run: Preview actions without creating worktrees or report files.
+- --confirm: Require interactive confirmation before creating worktrees or windows.
+- --yes: Skip confirmation prompts when creating multiple agents.
 
 ## Top-level fields
 
@@ -67,6 +69,20 @@ Replace in command strings:
     }
   ]
 }
+```
+
+## Prepare helper
+
+Create a config with an interactive loop:
+
+```bash
+python scripts/prepare_agents.py --output agents.json
+```
+
+Generate a quick example:
+
+```bash
+python scripts/prepare_agents.py --output agents.json --example --count 3 --overwrite
 ```
 
 ## Example: mixed tools

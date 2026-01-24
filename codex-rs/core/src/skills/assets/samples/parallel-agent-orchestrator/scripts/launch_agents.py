@@ -255,6 +255,42 @@ def launch_linux_window(command: list[str], worktree: Path, terminal: str) -> bo
     return False
 
 
+def require_confirmation(agent_count: int, force: bool) -> None:
+    if agent_count <= 1 and not force:
+        return
+    response = input(
+        f"Confirm {agent_count} agent(s). Type {agent_count} to continue: "
+    ).strip()
+    if response != str(agent_count):
+        die("Confirmation failed")
+    response = input("Type 'launch' to proceed: ").strip().lower()
+    if response != "launch":
+        die("Confirmation failed")
+
+
+def apply_changes(
+    root: Path,
+    reports_root: Path,
+    inboxes_root: Path,
+    base_ref: str,
+    prepared: list[tuple[str, Path, Path, Path, str, str | None, list[str]]],
+    terminal: str,
+    no_window: bool,
+) -> None:
+    reports_root.mkdir(parents=True, exist_ok=True)
+    inboxes_root.mkdir(parents=True, exist_ok=True)
+
+    for name, worktree, report, inbox, branch, task, command in prepared:
+        ensure_worktree(root, worktree, branch, base_ref)
+        write_report_stub(report, name, task)
+        write_inbox_stub(inbox, name)
+        if no_window:
+            continue
+        if not launch_window(command, worktree, terminal):
+            print(f"- {name}")
+            print("  note: window launch not supported on this OS")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Launch parallel agent terminals with git worktrees.",
@@ -269,6 +305,16 @@ def main() -> None:
         "--dry-run",
         action="store_true",
         help="Print planned actions without creating worktrees or reports",
+    )
+    parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Require interactive confirmation before creating worktrees or windows",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompts when creating multiple agents",
     )
     args = parser.parse_args()
 
@@ -295,9 +341,6 @@ def main() -> None:
 
     reports_root = resolve_path(root, reports_dir) or (root / "reports")
     inboxes_root = resolve_path(root, inboxes_dir) or (root / inboxes_dir)
-    if not args.dry_run:
-        reports_root.mkdir(parents=True, exist_ok=True)
-        inboxes_root.mkdir(parents=True, exist_ok=True)
 
     prepared = []
 
@@ -321,11 +364,6 @@ def main() -> None:
         if inbox is None:
             inbox = inboxes_root / f"agent-{slug}.inbox.md"
 
-        if not args.dry_run:
-            ensure_worktree(root, worktree, branch, base_ref)
-            write_report_stub(report, name, task)
-            write_inbox_stub(inbox, name)
-
         mapping = {
             "{ROOT}": str(root),
             "{WORKTREE}": str(worktree),
@@ -336,26 +374,36 @@ def main() -> None:
         }
 
         command = build_command(agent, defaults, mapping)
-        prepared.append((name, worktree, report, inbox, command))
+        prepared.append((name, worktree, report, inbox, branch, task, command))
 
     print(f"Prepared {len(prepared)} agent(s).")
 
-    for name, worktree, report, inbox, command in prepared:
+    for name, worktree, report, inbox, _branch, _task, command in prepared:
         print(f"- {name}")
         print(f"  worktree: {worktree}")
         print(f"  report:   {report}")
         print(f"  inbox:    {inbox}")
         print(f"  command:  {' '.join(command)}")
 
-        if args.no_window or args.dry_run:
-            continue
-        if not launch_window(command, worktree, terminal):
-            print("  note: window launch not supported on this OS")
-
-    if not WINDOWS and not args.no_window and not args.dry_run:
-        print("\nTip: use --no-window and open terminals manually on this OS.")
     if args.dry_run:
         print("\nDry run: no worktrees or reports were created.")
+        return
+
+    if not args.yes:
+        require_confirmation(len(prepared), args.confirm)
+
+    apply_changes(
+        root,
+        reports_root,
+        inboxes_root,
+        base_ref,
+        prepared,
+        terminal,
+        args.no_window,
+    )
+
+    if not WINDOWS and not args.no_window:
+        print("\nTip: use --no-window and open terminals manually on this OS.")
 
 
 if __name__ == "__main__":
