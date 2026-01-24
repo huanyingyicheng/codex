@@ -19,6 +19,7 @@ This file documents the JSON schema for scripts/launch_agents.py.
 - inboxes_dir (string, optional): Relative to root. Default is the same as reports_dir.
 - base_ref (string, optional): Git ref used when creating new worktrees. Default is "HEAD".
 - terminal (string, optional): Terminal launcher preference.
+- window_mode (string, optional): Windows Terminal only. "window" (default), "tab", or "pane".
   - Windows: "auto" (default), "wt", or "cmd".
   - macOS: "auto" (default) or "terminal".
   - Linux: "auto" (default), "gnome-terminal", "konsole", "xfce4-terminal",

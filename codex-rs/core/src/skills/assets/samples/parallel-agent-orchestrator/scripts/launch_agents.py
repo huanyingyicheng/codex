@@ -203,6 +203,7 @@ def launch_window(
     command: list[str],
     worktree: Path,
     terminal: str,
+    window_mode: str,
 ) -> bool:
     if not WINDOWS:
         if MACOS:
@@ -216,6 +217,16 @@ def launch_window(
         die("terminal is set to 'wt' but wt was not found on PATH")
 
     if use_wt:
+        if window_mode == "tab":
+            subprocess.Popen(
+                ["wt", "-w", "0", "new-tab", "-d", str(worktree), "--", *command]
+            )
+            return True
+        if window_mode == "pane":
+            subprocess.Popen(
+                ["wt", "-w", "0", "split-pane", "-d", str(worktree), "--", *command]
+            )
+            return True
         subprocess.Popen(["wt", "-d", str(worktree), "--", *command])
         return True
 
@@ -302,6 +313,7 @@ def apply_changes(
     base_ref: str,
     prepared: list[tuple[str, Path, Path, Path, str, str | None, list[str]]],
     terminal: str,
+    window_mode: str,
     no_window: bool,
 ) -> None:
     reports_root.mkdir(parents=True, exist_ok=True)
@@ -313,7 +325,7 @@ def apply_changes(
         write_inbox_stub(inbox, name)
         if no_window:
             continue
-        if not launch_window(command, worktree, terminal):
+        if not launch_window(command, worktree, terminal, window_mode):
             print(f"- {name}")
             print("  note: window launch not supported on this OS")
 
@@ -366,6 +378,9 @@ def main() -> None:
     inboxes_dir = config.get("inboxes_dir", reports_dir)
     base_ref = config.get("base_ref", "HEAD")
     terminal = config.get("terminal", "auto")
+    window_mode = config.get("window_mode", "window")
+    if window_mode not in ("window", "tab", "pane"):
+        die("window_mode must be one of: window, tab, pane")
 
     defaults = {
         "codex_args": config.get("codex_args", []),
@@ -433,6 +448,7 @@ def main() -> None:
         base_ref,
         prepared,
         terminal,
+        window_mode,
         args.no_window,
     )
 
