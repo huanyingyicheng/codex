@@ -5,13 +5,13 @@
     {
       "name": "agent-a",
       "tool": "codex",
-      "task": "Describe what you want agent-a to do",
+      "task": "Scope: <paths/modules>. Goal: <what to deliver>. Budget: <time/tokens/commands>. Report using the shared protocol and stop when done.",
       "codex_args": ["-a", "auto-edit"]
     },
     {
       "name": "agent-b",
       "tool": "codex",
-      "task": "Describe what you want agent-b to do",
+      "task": "Scope: <paths/modules>. Goal: <what to deliver>. Budget: <time/tokens/commands>. Report using the shared protocol and stop when done.",
       "codex_args": ["-a", "auto-edit"]
     }
   ]

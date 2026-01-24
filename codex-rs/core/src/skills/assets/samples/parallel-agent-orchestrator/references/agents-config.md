@@ -40,6 +40,16 @@ This file documents the JSON schema for scripts/launch_agents.py.
 - report (string, optional): Report path (relative to root unless absolute).
 - inbox (string, optional): Inbox path (relative to root unless absolute).
 
+## Recommended task format (large repos)
+
+Include clear scope and a budget so agents can stay consistent and stop on time:
+
+- Scope: <paths/modules>
+- Goal: <what to deliver>
+- Budget: <time/tokens/commands>
+- Acceptance: <tests or checks>
+- Stop when done and write a final summary.
+
 ## Placeholders
 
 Replace in command strings:
