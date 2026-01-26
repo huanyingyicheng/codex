@@ -1,71 +1,51 @@
-# Plugin System Design (B-first, C-extensible)
+# 插件系统设计（B 版内容插件）
 
-## Goals
-- Install content plugins that ship commands, skills, rules, contexts, hooks, and MCP configs.
-- Support user-level and project-level installs with clear precedence.
-- Validate plugins on install (structure + traversal/symlink safety + hook/script scan).
-- Expose CLI and TUI management with enable/disable and policy prompts.
-- Leave an explicit extension point for runtime code plugins (C) without executing code now.
+## 目标
+实现可安装的内容型插件，覆盖 commands、skills、rules、contexts、hooks、agents、mcp-configs。安装时执行合规校验并提示策略设置，支持本地与远程来源（1+3），可选 marketplace 索引（2）。为运行时代码插件（C）预留扩展位点，但不实现。
 
-## Non-goals (for B phase)
-- Execute plugin hooks or runtime code.
-- Provide sandboxed plugin runtime.
-- Auto-enable MCP servers or hooks without user policy.
+## 范围与非目标
+- 范围：插件清单解析、合规校验、安装与注册表管理；运行时加载插件内容；CLI/TUI 管理。
+- 非目标：自动更新、签名校验、运行时代码插件、远程仓库扫描与评级。
 
-## Plugin Format
-- Prefer `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
-- Also accept `plugin.json` at repo root for compatibility.
-- Components are optional and defined as relative paths:
-  - `commands`, `skills`, `rules`, `contexts`, `hooks`, `agents`, `mcp-configs`.
+## 架构与组件
+- core：`plugins` 模块负责 manifest 解析、校验、安装、registry 与 policy。校验失败阻断安装；风险项仅警告。
+- cli/tui：仅展示与管理（安装/列表/启用/禁用/策略），不直接读取插件内容。
+- 运行时加载：在现有命令、技能、规则、上下文、MCP 配置加载逻辑上追加插件 roots，保持“项目 > 用户 > 默认”覆盖顺序。
+- C 扩展位点：定义 `PluginRuntime` trait 与 registry 的可选 runtime 字段，保留动态插件接入通道。
 
-## Storage Layout
-- User scope: `~/.codex/plugins/<plugin_name>/...`
-- Project scope: `<repo>/.codex/plugins/<plugin_name>/...`
-- Registry: `installed_plugins.json` stored under each scope root.
+## 插件格式与来源
+- manifest 优先读取 `.claude-plugin/plugin.json`，否则读取根 `plugin.json`。
+- 支持字段：`commands/skills/rules/contexts/hooks/agents/mcp-configs`，并兼容 `mcpServers` 别名。
+- 来源：
+  - 1）本地目录直接安装。
+  - 3）远程 git/URL/zip 下载后解包安装。
+  - 2）marketplace.json 作为索引，解析出 `source` 后走同一流程；缺失索引不阻断安装，但需提示用户。
 
-## Architecture
-- `PluginManager` (codex-core) reads registries, loads manifests, and resolves component roots.
-- `PluginInstaller` installs from local path, GitHub repo, or URL zip into a temp dir, validates, then moves to target.
-- `PluginValidator` enforces:
-  - Manifest presence and component path validity.
-  - Path traversal and symlink escape checks.
-  - Hook/script static scan with warnings and policy gating.
-- `PluginRegistry` stores install metadata, enabled state, compliance results, and policy settings.
-- `RuntimePlugin` trait reserved for C phase.
+## 安装流程与合规校验
+- 流程：获取源 → 读取 manifest → 校验 → 复制到插件存储 → 写入 registry。
+- 校验：
+  - 禁止绝对路径与 `..` 目录穿越。
+  - 校验路径存在、canonicalize 后仍在插件根内。
+  - 禁止 symlink。
+  - hooks/scripts 扫描：若发现则生成风险提示，默认禁用，要求用户设置策略。
+  - 许可信息缺失仅警告，不阻断安装。
 
-## Data Flow
-- Install:
-  1) Fetch/unpack → 2) Validate → 3) Write plugin dir → 4) Update registry → 5) Report compliance.
-- Load:
-  - Merge registries (project > user), filter enabled.
-  - Provide component roots to skills, rules, prompts, contexts, and MCP config loaders.
+## 注册表与策略
+- registry 记录：name、enabled、scope、source、policy、compliance report。
+- policy：`allow_hooks` / `allow_scripts` 默认 false。
+- 禁用仅影响加载，不删除文件；`--purge` 可选删除。
 
-## Component Integration
-- Commands: expose as custom prompts under `/prompts:`.
-- Skills: add plugin skill roots to skills loader.
-- Rules: add plugin rules dirs to execpolicy loader (lower precedence than local rules).
-- Contexts: append plugin context files to user instructions.
-- MCP configs: load configs as disabled-by-default servers; user must enable explicitly.
-- Hooks/Agents: recorded only; runtime execution deferred to C.
+## 运行时加载策略
+- commands：支持嵌套目录，命名采用 `dir:subdir:filename`；避免与现有命令冲突时优先级按“项目 > 用户 > 默认”。
+- skills/rules/contexts/hooks/agents：追加插件 root 到现有扫描路径，保持排序稳定。
+- mcp-configs：支持 `mcp-configs` 与 `mcpServers` 字段；默认 disabled，需用户启用。
 
-## Policy and Compliance
-- Mandatory checks: manifest + safety + hook/script scan.
-- Optional checks: license/source/hash (warn only).
-- Hooks/scripts default to disabled. User must set policy to allow.
+## 错误处理
+- 结构错误（manifest 缺失、路径越界、symlink、无效 JSON）直接失败并输出原因。
+- 合规风险（hooks/scripts、许可缺失、来源未知）输出警告并要求设置策略。
 
-## CLI UX
-- `codex plugin install <source> [--project|--user]`.
-- `codex plugin list` with status + warnings.
-- `codex plugin enable|disable <name>`.
-- `codex plugin policy set <name> ...`.
-- `codex plugin marketplace list|add|remove`.
-
-## TUI UX
-- `/plugins` opens a management view.
-- Show installed plugins, scope, enabled state, and compliance status.
-- Toggle enable/disable and open policy hints.
-
-## Testing
-- Core unit tests for manifest parsing, path checks, registry merge.
-- CLI tests for install/list/enable/disable.
-- TUI snapshot tests for `/plugins` view.
+## 测试策略
+- core：manifest 解析、路径校验、合规报告、registry 读写、安装复制。
+- cli：`plugin install/list/enable/disable/policy` 输出与状态变更。
+- tui：/plugins 视图快照测试。
+- mcp：配置解析测试，确保字段缺失不崩溃。
