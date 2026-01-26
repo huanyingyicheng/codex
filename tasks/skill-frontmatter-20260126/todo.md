@@ -4,4 +4,4 @@
 - [x] Add frontmatter to skill files via script
 - [x] Verify frontmatter headers
 - [x] Record changes and verification in readme.md
-- [ ] Git commit and merge
+- [x] Git commit and merge
