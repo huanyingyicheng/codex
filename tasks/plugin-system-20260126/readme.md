@@ -20,6 +20,7 @@
 - 已完成 TUI 测试，通过 `cargo test -p codex-tui` 验证，结果为成功。
 - 已完成 Core 测试，通过 `cargo test -p codex-core` 验证，结果为失败（9 项失败，主要为 rmcp_client/cli_stream/test_stdio_server 等外部依赖）。
 - 已完成全量测试，通过 `cargo test --all-features` 验证，结果为失败（bindgen 找不到 libclang，需要设置 `LIBCLANG_PATH`）。
+- 已完成 LLVM 安装尝试，通过 `winget install LLVM.LLVM` 验证，结果为失败（user scope 提示无适用安装程序，machine scope 安装无响应超时）。
 
 ## 最终交付
 - 插件内容加载（B）已可用，CLI/TUI 管理与文档齐备；运行时代码插件（C）预留扩展位点。
