@@ -7,6 +7,7 @@ use async_channel::unbounded;
 use codex_protocol::protocol::McpListToolsResponseEvent;
 use codex_protocol::protocol::SandboxPolicy;
 use mcp_types::Tool as McpTool;
+use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use crate::AuthManager;
@@ -14,10 +15,14 @@ use crate::CodexAuth;
 use crate::config::Config;
 use crate::config::types::McpServerConfig;
 use crate::config::types::McpServerTransportConfig;
+use crate::config_loader::ConfigLayerStackOrdering;
 use crate::features::Feature;
 use crate::mcp::auth::compute_auth_statuses;
 use crate::mcp_connection_manager::McpConnectionManager;
 use crate::mcp_connection_manager::SandboxState;
+use crate::plugins::PluginComponent;
+use crate::plugins::plugin_component_dirs_from_stores;
+use crate::plugins::plugin_stores_from_config;
 
 const MCP_TOOL_NAME_PREFIX: &str = "mcp";
 const MCP_TOOL_NAME_DELIMITER: &str = "__";
@@ -121,12 +126,159 @@ pub(crate) fn effective_mcp_servers(
     config: &Config,
     auth: Option<&CodexAuth>,
 ) -> HashMap<String, McpServerConfig> {
+    let mut servers = config.mcp_servers.get().clone();
+    let plugin_servers = load_plugin_mcp_servers(config);
+    for (name, server) in plugin_servers {
+        servers.entry(name).or_insert(server);
+    }
     with_codex_apps_mcp(
-        config.mcp_servers.get().clone(),
+        servers,
         config.features.enabled(Feature::Connectors),
         auth,
         config,
     )
+}
+
+fn load_plugin_mcp_servers(config: &Config) -> HashMap<String, McpServerConfig> {
+    // 关键逻辑：插件 MCP 配置默认禁用，只作为可选模板合并进入列表。
+    let stores =
+        plugin_stores_from_config(config, ConfigLayerStackOrdering::HighestPrecedenceFirst);
+    let plugin_dirs = plugin_component_dirs_from_stores(&stores, PluginComponent::McpConfigs);
+    let mut servers: HashMap<String, McpServerConfig> = HashMap::new();
+
+    for plugin_dir in plugin_dirs {
+        let configs = collect_mcp_configs(&plugin_dir.path);
+        for (name, server) in configs {
+            servers.entry(name).or_insert(server);
+        }
+    }
+
+    servers
+}
+
+fn collect_mcp_configs(root: &PathBuf) -> HashMap<String, McpServerConfig> {
+    let mut servers = HashMap::new();
+    if !root.exists() {
+        return servers;
+    }
+
+    let mut paths = Vec::new();
+    if root.is_file() {
+        paths.push(root.clone());
+    } else if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_json = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
+            if is_json {
+                paths.push(path);
+            }
+        }
+    }
+
+    paths.sort();
+    for path in paths {
+        match std::fs::read_to_string(&path) {
+            Ok(text) => match serde_json::from_str::<PluginMcpConfigFile>(&text) {
+                Ok(parsed) => {
+                    for (name, entry) in parsed.mcp_servers {
+                        if let Some(config) = entry.into_config() {
+                            servers.entry(name).or_insert(config);
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "failed to parse plugin mcp config {}: {err:#}",
+                        path.display()
+                    );
+                }
+            },
+            Err(err) => {
+                tracing::warn!(
+                    "failed to read plugin mcp config {}: {err:#}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    servers
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginMcpConfigFile {
+    #[serde(rename = "mcpServers", default)]
+    mcp_servers: HashMap<String, PluginMcpServer>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginMcpServer {
+    #[serde(default)]
+    r#type: Option<String>,
+    #[serde(default)]
+    command: Option<String>,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    cwd: Option<PathBuf>,
+}
+
+impl PluginMcpServer {
+    fn into_config(self) -> Option<McpServerConfig> {
+        let enabled = false;
+        let disabled_reason = None;
+        let startup_timeout_sec = None;
+        let tool_timeout_sec = None;
+        let enabled_tools = None;
+        let disabled_tools = None;
+
+        if self.r#type.as_deref() == Some("http") || self.url.is_some() {
+            let url = self.url?;
+            return Some(McpServerConfig {
+                transport: McpServerTransportConfig::StreamableHttp {
+                    url,
+                    bearer_token_env_var: None,
+                    http_headers: None,
+                    env_http_headers: None,
+                },
+                enabled,
+                disabled_reason,
+                startup_timeout_sec,
+                tool_timeout_sec,
+                enabled_tools,
+                disabled_tools,
+            });
+        }
+
+        let command = self.command?;
+        let env = if self.env.is_empty() {
+            None
+        } else {
+            Some(self.env)
+        };
+        Some(McpServerConfig {
+            transport: McpServerTransportConfig::Stdio {
+                command,
+                args: self.args,
+                env,
+                env_vars: Vec::new(),
+                cwd: self.cwd,
+            },
+            enabled,
+            disabled_reason,
+            startup_timeout_sec,
+            tool_timeout_sec,
+            enabled_tools,
+            disabled_tools,
+        })
+    }
 }
 
 pub async fn collect_mcp_snapshot(config: &Config) -> McpListToolsResponseEvent {

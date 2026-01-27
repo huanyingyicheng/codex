@@ -44,9 +44,13 @@ use codex_core::config::edit::ConfigEditsBuilder;
 use codex_core::config_loader::ConfigLayerStackOrdering;
 #[cfg(target_os = "windows")]
 use codex_core::features::Feature;
+use codex_core::git_info::get_git_repo_root;
 use codex_core::models_manager::manager::RefreshStrategy;
 use codex_core::models_manager::model_presets::HIDE_GPT_5_1_CODEX_MAX_MIGRATION_PROMPT_CONFIG;
 use codex_core::models_manager::model_presets::HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG;
+use codex_core::plugins::PluginRegistry;
+use codex_core::plugins::PluginScope;
+use codex_core::plugins::PluginStore;
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::DeprecationNoticeEvent;
 use codex_core::protocol::Event;
@@ -218,6 +222,11 @@ fn emit_project_config_warnings(app_event_tx: &AppEventSender, config: &Config) 
     app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
         history_cell::new_warning_event(message),
     )));
+}
+
+fn find_project_root(cwd: &Path) -> PathBuf {
+    // 关键逻辑：优先使用 git 根目录，否则回退到当前工作目录。
+    get_git_repo_root(cwd).unwrap_or_else(|| cwd.to_path_buf())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1953,6 +1962,9 @@ impl App {
             AppEvent::OpenManageSkillsPopup => {
                 self.chat_widget.open_manage_skills_popup();
             }
+            AppEvent::OpenPluginsPopup => {
+                self.chat_widget.open_plugins_popup();
+            }
             AppEvent::SetSkillEnabled { path, enabled } => {
                 let edits = [ConfigEdit::SetSkillConfig {
                     path: path.clone(),
@@ -1971,6 +1983,42 @@ impl App {
                         self.chat_widget.add_error_message(format!(
                             "Failed to update skill config for {path_display}: {err}"
                         ));
+                    }
+                }
+            }
+            AppEvent::SetPluginEnabled {
+                name,
+                scope,
+                enabled,
+            } => {
+                // 关键逻辑：按 scope 更新插件 registry，并同步到视图状态。
+                let store = match scope {
+                    PluginScope::User => PluginStore::user_scope(&self.config.codex_home),
+                    PluginScope::Project => {
+                        let root = find_project_root(&self.config.cwd);
+                        PluginStore::project_scope(&root.join(".codex"))
+                    }
+                };
+                match PluginRegistry::load(&store.registry_path()) {
+                    Ok(mut registry) => {
+                        let Some(entry) = registry.find_entry_mut(&name) else {
+                            self.chat_widget
+                                .add_error_message(format!("Plugin '{name}' is not installed."));
+                            return Ok(AppRunControl::Continue);
+                        };
+                        entry.enabled = enabled;
+                        if let Err(err) = registry.save(&store.registry_path()) {
+                            self.chat_widget.add_error_message(format!(
+                                "Failed to update plugin '{name}': {err}"
+                            ));
+                        } else {
+                            self.chat_widget
+                                .update_plugin_enabled(name.clone(), scope, enabled);
+                        }
+                    }
+                    Err(err) => {
+                        self.chat_widget
+                            .add_error_message(format!("Failed to load plugin registry: {err}"));
                     }
                 }
             }
@@ -1995,6 +2043,9 @@ impl App {
             }
             AppEvent::ManageSkillsClosed => {
                 self.chat_widget.handle_manage_skills_closed();
+            }
+            AppEvent::ManagePluginsClosed => {
+                self.chat_widget.handle_manage_plugins_closed();
             }
             AppEvent::FullScreenApprovalRequest(request) => match request {
                 ApprovalRequest::ApplyPatch { cwd, changes, .. } => {

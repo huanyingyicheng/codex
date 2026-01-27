@@ -14,13 +14,19 @@
 //! 3.  We do **not** walk past the Git root.
 
 use crate::config::Config;
+use crate::config_loader::ConfigLayerStackOrdering;
 use crate::features::Feature;
+use crate::plugins::PluginComponent;
+use crate::plugins::plugin_component_dirs_from_stores;
+use crate::plugins::plugin_stores_from_config;
 use crate::skills::SkillMetadata;
 use crate::skills::render_skills_section;
 use dunce::canonicalize as normalize_path;
+use std::path::Path;
 use std::path::PathBuf;
 use tokio::io::AsyncReadExt;
 use tracing::error;
+use walkdir::WalkDir;
 
 pub(crate) const HIERARCHICAL_AGENTS_MESSAGE: &str =
     include_str!("../hierarchical_agents_message.md");
@@ -60,6 +66,19 @@ pub(crate) async fn get_user_instructions(
             error!("error trying to find project doc: {e:#}");
         }
     };
+
+    match read_plugin_contexts(config).await {
+        Ok(Some(contexts)) => {
+            if !output.is_empty() {
+                output.push_str("\n\n");
+            }
+            output.push_str(&contexts);
+        }
+        Ok(None) => {}
+        Err(e) => {
+            error!("error trying to load plugin contexts: {e:#}");
+        }
+    }
 
     let skills_section = skills.and_then(render_skills_section);
     if let Some(skills_section) = skills_section {
@@ -140,6 +159,114 @@ pub async fn read_project_docs(config: &Config) -> std::io::Result<Option<String
     } else {
         Ok(Some(parts.join("\n\n")))
     }
+}
+
+async fn read_plugin_contexts(config: &Config) -> std::io::Result<Option<String>> {
+    let max_total = config.project_doc_max_bytes;
+    if max_total == 0 {
+        return Ok(None);
+    }
+
+    let stores =
+        plugin_stores_from_config(config, ConfigLayerStackOrdering::HighestPrecedenceFirst);
+    let plugin_dirs = plugin_component_dirs_from_stores(&stores, PluginComponent::Contexts);
+    if plugin_dirs.is_empty() {
+        return Ok(None);
+    }
+
+    let mut remaining: u64 = max_total as u64;
+    let mut parts: Vec<String> = Vec::new();
+    for plugin_dir in plugin_dirs {
+        if remaining == 0 {
+            break;
+        }
+        let files = collect_context_files(&plugin_dir.path);
+        for file_path in files {
+            if remaining == 0 {
+                break;
+            }
+            let file = match tokio::fs::File::open(&file_path).await {
+                Ok(file) => file,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
+
+            let size = file.metadata().await?.len();
+            let mut reader = tokio::io::BufReader::new(file).take(remaining);
+            let mut data: Vec<u8> = Vec::new();
+            reader.read_to_end(&mut data).await?;
+
+            if size > remaining {
+                tracing::warn!(
+                    "Plugin context `{}` exceeds remaining budget ({} bytes) - truncating.",
+                    file_path.display(),
+                    remaining,
+                );
+            }
+
+            let text = String::from_utf8_lossy(&data).to_string();
+            if text.trim().is_empty() {
+                continue;
+            }
+
+            let rel = file_path
+                .strip_prefix(&plugin_dir.path)
+                .unwrap_or(&file_path)
+                .display();
+            let plugin_name = &plugin_dir.plugin_name;
+            // 关键逻辑：将插件上下文带上来源标识，避免混淆与信息丢失。
+            let mut block = String::new();
+            block.push_str(&format!("--- plugin-context: {plugin_name}/{rel} ---"));
+            block.push('\n');
+            block.push('\n');
+            block.push_str(&text);
+            parts.push(block);
+
+            remaining = remaining.saturating_sub(data.len() as u64);
+        }
+    }
+
+    if parts.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(parts.join("\n\n")))
+    }
+}
+
+fn collect_context_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    if !root.exists() {
+        return files;
+    }
+
+    let walker = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| !name.starts_with('.'))
+        });
+
+    for entry in walker.flatten() {
+        if entry.file_type().is_symlink() || !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        let ext = path.extension().and_then(|value| value.to_str());
+        let is_allowed = ext.is_some_and(|value| matches!(value, "md" | "txt"));
+        if !is_allowed {
+            continue;
+        }
+        files.push(path.to_path_buf());
+    }
+
+    files.sort();
+    files
 }
 
 /// Discover the list of AGENTS.md files using the same search rules as
