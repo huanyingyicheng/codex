@@ -9,6 +9,7 @@ use crate::config_loader::ConfigLayerStack;
 use crate::config_loader::ConfigLayerStackOrdering;
 use crate::is_dangerous_command::command_might_be_dangerous;
 use crate::is_safe_command::is_known_safe_command;
+use codex_app_server_protocol::ConfigLayerSource;
 use codex_execpolicy::AmendError;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Error as ExecPolicyRuleError;
@@ -27,6 +28,9 @@ use tokio::task::spawn_blocking;
 use crate::bash::parse_shell_lc_plain_commands;
 use crate::features::Feature;
 use crate::features::Features;
+use crate::plugins::PluginComponent;
+use crate::plugins::PluginStore;
+use crate::plugins::plugin_component_dirs_from_stores;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use shlex::try_join as shlex_try_join;
@@ -256,6 +260,29 @@ pub async fn load_exec_policy(config_stack: &ConfigLayerStack) -> Result<Policy,
             let policy_dir = config_folder.join(RULES_DIR_NAME).expect("safe join");
             let layer_policy_paths = collect_policy_files(&policy_dir).await?;
             policy_paths.extend(layer_policy_paths);
+
+            let plugin_store = match &layer.name {
+                ConfigLayerSource::Project { .. } => {
+                    Some(PluginStore::project_scope(config_folder.as_path()))
+                }
+                ConfigLayerSource::User { .. } => {
+                    Some(PluginStore::user_scope(config_folder.as_path()))
+                }
+                ConfigLayerSource::System { .. }
+                | ConfigLayerSource::Mdm { .. }
+                | ConfigLayerSource::SessionFlags
+                | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+                | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => None,
+            };
+
+            if let Some(store) = plugin_store {
+                for plugin_dir in
+                    plugin_component_dirs_from_stores(&[store], PluginComponent::Rules)
+                {
+                    let plugin_policy_paths = collect_policy_files(&plugin_dir.path).await?;
+                    policy_paths.extend(plugin_policy_paths);
+                }
+            }
         }
     }
 

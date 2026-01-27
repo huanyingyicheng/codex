@@ -1,6 +1,10 @@
 use crate::config::Config;
 use crate::config_loader::ConfigLayerStack;
 use crate::config_loader::ConfigLayerStackOrdering;
+use crate::plugins::PluginComponent;
+use crate::plugins::PluginScope;
+use crate::plugins::PluginStore;
+use crate::plugins::plugin_component_dirs_from_stores;
 use crate::skills::model::SkillDependencies;
 use crate::skills::model::SkillError;
 use crate::skills::model::SkillInterface;
@@ -162,6 +166,13 @@ where
 fn skill_roots_from_layer_stack_inner(config_layer_stack: &ConfigLayerStack) -> Vec<SkillRoot> {
     let mut roots = Vec::new();
 
+    fn scope_from_plugin(scope: PluginScope) -> SkillScope {
+        match scope {
+            PluginScope::Project => SkillScope::Repo,
+            PluginScope::User => SkillScope::User,
+        }
+    }
+
     for layer in
         config_layer_stack.get_layers(ConfigLayerStackOrdering::HighestPrecedenceFirst, true)
     {
@@ -175,6 +186,16 @@ fn skill_roots_from_layer_stack_inner(config_layer_stack: &ConfigLayerStack) -> 
                     path: config_folder.as_path().join(SKILLS_DIR_NAME),
                     scope: SkillScope::Repo,
                 });
+
+                let store = PluginStore::project_scope(config_folder.as_path());
+                for plugin_dir in
+                    plugin_component_dirs_from_stores(&[store], PluginComponent::Skills)
+                {
+                    roots.push(SkillRoot {
+                        path: plugin_dir.path,
+                        scope: scope_from_plugin(plugin_dir.scope),
+                    });
+                }
             }
             ConfigLayerSource::User { .. } => {
                 // `$CODEX_HOME/skills` (user-installed skills).
@@ -182,6 +203,16 @@ fn skill_roots_from_layer_stack_inner(config_layer_stack: &ConfigLayerStack) -> 
                     path: config_folder.as_path().join(SKILLS_DIR_NAME),
                     scope: SkillScope::User,
                 });
+
+                let store = PluginStore::user_scope(config_folder.as_path());
+                for plugin_dir in
+                    plugin_component_dirs_from_stores(&[store], PluginComponent::Skills)
+                {
+                    roots.push(SkillRoot {
+                        path: plugin_dir.path,
+                        scope: scope_from_plugin(plugin_dir.scope),
+                    });
+                }
 
                 // Embedded system skills are cached under `$CODEX_HOME/skills/.system` and are a
                 // special case (not a config layer).

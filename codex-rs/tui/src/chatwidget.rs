@@ -150,6 +150,7 @@ use crate::bottom_pane::ExperimentalFeaturesView;
 use crate::bottom_pane::FeedbackAudience;
 use crate::bottom_pane::InputResult;
 use crate::bottom_pane::LocalImageAttachment;
+use crate::bottom_pane::PluginToggleItem;
 use crate::bottom_pane::QUIT_SHORTCUT_TIMEOUT;
 use crate::bottom_pane::SelectionAction;
 use crate::bottom_pane::SelectionItem;
@@ -192,6 +193,7 @@ use self::agent::spawn_agent_from_existing;
 pub(crate) use self::agent::spawn_op_forwarder;
 mod session_header;
 use self::session_header::SessionHeader;
+mod plugins;
 mod skills;
 use self::skills::collect_tool_mentions;
 use self::skills::find_app_mentions;
@@ -492,6 +494,8 @@ pub(crate) struct ChatWidget {
     suppressed_exec_calls: HashSet<String>,
     skills_all: Vec<ProtocolSkillMetadata>,
     skills_initial_state: Option<HashMap<PathBuf, bool>>,
+    plugins_all: Vec<PluginToggleItem>,
+    plugins_initial_state: Option<HashMap<String, bool>>,
     last_unified_wait: Option<UnifiedExecWaitState>,
     unified_exec_wait_streak: Option<UnifiedExecWaitStreak>,
     task_complete_pending: bool,
@@ -2226,6 +2230,8 @@ impl ChatWidget {
             config,
             skills_all: Vec::new(),
             skills_initial_state: None,
+            plugins_all: Vec::new(),
+            plugins_initial_state: None,
             current_collaboration_mode,
             active_collaboration_mask,
             auth_manager,
@@ -2371,6 +2377,8 @@ impl ChatWidget {
             config,
             skills_all: Vec::new(),
             skills_initial_state: None,
+            plugins_all: Vec::new(),
+            plugins_initial_state: None,
             current_collaboration_mode,
             active_collaboration_mask,
             auth_manager,
@@ -2505,6 +2513,8 @@ impl ChatWidget {
             config,
             skills_all: Vec::new(),
             skills_initial_state: None,
+            plugins_all: Vec::new(),
+            plugins_initial_state: None,
             current_collaboration_mode,
             active_collaboration_mask,
             auth_manager,
@@ -2936,6 +2946,9 @@ impl ChatWidget {
             }
             SlashCommand::Skills => {
                 self.open_skills_menu();
+            }
+            SlashCommand::Plugins => {
+                self.app_event_tx.send(AppEvent::OpenPluginsPopup);
             }
             SlashCommand::Status => {
                 self.add_status_output();

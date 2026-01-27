@@ -97,8 +97,10 @@ tree-sitter = { workspace = true }
 tree-sitter-bash = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4", "v5"] }
+walkdir = { workspace = true }
 which = { workspace = true }
 wildmatch = { workspace = true }
+zip = { workspace = true }
 
 [features]
 deterministic_process_ids = []

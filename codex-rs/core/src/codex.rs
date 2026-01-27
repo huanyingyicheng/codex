@@ -2510,6 +2510,8 @@ async fn submission_loop(sess: Arc<Session>, config: Arc<Config>, rx_sub: Receiv
 
 /// Operation handlers
 mod handlers {
+    use std::collections::HashSet;
+
     use crate::codex::Session;
     use crate::codex::SessionSettingsUpdate;
     use crate::codex::TurnContext;
@@ -2879,12 +2881,40 @@ mod handlers {
     }
 
     pub async fn list_custom_prompts(sess: &Session, sub_id: String) {
-        let custom_prompts: Vec<CustomPrompt> =
-            if let Some(dir) = crate::custom_prompts::default_prompts_dir() {
-                crate::custom_prompts::discover_prompts_in(&dir).await
-            } else {
-                Vec::new()
-            };
+        let config = {
+            let state = sess.state.lock().await;
+            Session::build_per_turn_config(&state.session_configuration)
+        };
+
+        let mut custom_prompts: Vec<CustomPrompt> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+
+        let plugin_stores = crate::plugins::plugin_stores_from_config(
+            &config,
+            crate::config_loader::ConfigLayerStackOrdering::HighestPrecedenceFirst,
+        );
+        let plugin_command_dirs = crate::plugins::plugin_component_dirs_from_stores(
+            &plugin_stores,
+            crate::plugins::PluginComponent::Commands,
+        );
+
+        for dir in plugin_command_dirs {
+            let prompts = crate::custom_prompts::discover_prompts_in_tree(&dir.path).await;
+            for prompt in prompts {
+                if seen.insert(prompt.name.clone()) {
+                    custom_prompts.push(prompt);
+                }
+            }
+        }
+
+        if let Some(dir) = crate::custom_prompts::default_prompts_dir() {
+            let prompts = crate::custom_prompts::discover_prompts_in(&dir).await;
+            for prompt in prompts {
+                if seen.insert(prompt.name.clone()) {
+                    custom_prompts.push(prompt);
+                }
+            }
+        }
 
         let event = Event {
             id: sub_id,

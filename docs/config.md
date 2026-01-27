@@ -12,6 +12,14 @@ Codex can connect to MCP servers configured in `~/.codex/config.toml`. See the c
 
 - https://developers.openai.com/codex/config-reference
 
+## Plugins
+
+Plugins are installed into registries and loaded automatically when enabled. See `docs/plugins.md`
+for install and policy details.
+
+- User registry: `~/.codex/plugins/installed_plugins.json`
+- Project registry: `.codex/plugins/installed_plugins.json`
+
 ## Apps (Connectors)
 
 Use `$` in the composer to insert a ChatGPT connector; the popover lists accessible

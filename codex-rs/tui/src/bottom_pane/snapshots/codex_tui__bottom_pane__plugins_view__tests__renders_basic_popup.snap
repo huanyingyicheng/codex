@@ -1,0 +1,14 @@
+---
+source: tui/src/bottom_pane/plugins_view.rs
+assertion_line: 352
+expression: "render_lines(&view, 60)"
+---
+                                                            
+  Enable/Disable Plugins                                    
+  Toggle plugins on or off. Policy settings are managed se  
+                                                            
+› [x] everything-claude-code (user)  commands, skills · h…  
+                                                            
+                                                            
+                                                            
+  Press space or enter to toggle; esc to close

@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use codex_chatgpt::connectors::AppInfo;
 use codex_common::approval_presets::ApprovalPreset;
+use codex_core::plugins::PluginScope;
 use codex_core::protocol::Event;
 use codex_core::protocol::RateLimitSnapshot;
 use codex_file_search::FileMatch;
@@ -249,14 +250,27 @@ pub(crate) enum AppEvent {
     /// Open the skills enable/disable picker.
     OpenManageSkillsPopup,
 
+    /// Open the plugins enable/disable picker.
+    OpenPluginsPopup,
+
     /// Enable or disable a skill by path.
     SetSkillEnabled {
         path: PathBuf,
         enabled: bool,
     },
 
+    /// Enable or disable a plugin by name and scope.
+    SetPluginEnabled {
+        name: String,
+        scope: PluginScope,
+        enabled: bool,
+    },
+
     /// Notify that the manage skills popup was closed.
     ManageSkillsClosed,
+
+    /// Notify that the manage plugins popup was closed.
+    ManagePluginsClosed,
 
     /// Re-open the permissions presets popup.
     OpenPermissionsPopup,
