@@ -260,6 +260,7 @@ impl PluginMcpServer {
                 tool_timeout_sec,
                 enabled_tools,
                 disabled_tools,
+                scopes: None,
             });
         }
 
@@ -283,6 +284,7 @@ impl PluginMcpServer {
             tool_timeout_sec,
             enabled_tools,
             disabled_tools,
+            scopes: None,
         })
     }
 }
