@@ -984,7 +984,7 @@ impl App {
             model.as_str(),
             auth_ref.and_then(CodexAuth::get_account_id),
             auth_ref.and_then(CodexAuth::get_account_email),
-            auth_ref.map(|auth| auth.mode),
+            auth_ref.map(CodexAuth::api_auth_mode),
             config.otel.log_user_prompt,
             codex_core::terminal::user_agent(),
             SessionSource::Cli,
@@ -1154,6 +1154,7 @@ impl App {
                 return Ok(AppExitInfo {
                     token_usage: app.token_usage(),
                     thread_id: app.chat_widget.thread_id(),
+                    thread_name: app.chat_widget.thread_name(),
                     update_action: app.pending_update_action,
                     exit_reason,
                 });
@@ -1369,10 +1370,7 @@ impl App {
                                 self.shutdown_current_thread().await;
                                 self.config = resume_config;
                                 tui.set_notification_method(self.config.tui_notification_method);
-                                self.file_search = FileSearchManager::new(
-                                    self.config.cwd.clone(),
-                                    self.app_event_tx.clone(),
-                                );
+                                self.file_search.update_search_dir(self.config.cwd.clone());
                                 let init = self.chatwidget_init_for_forked_or_resumed_thread(
                                     tui,
                                     self.config.clone(),
